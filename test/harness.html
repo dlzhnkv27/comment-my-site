@@ -1,0 +1,134 @@
+<!doctype html>
+<!--
+  Dev harness: runs extension/content.js in a normal page with a mocked chrome.* API.
+  The mock "captureVisibleTab" paints every [data-paint] element at its on-screen rect,
+  so stitching, fixed/sticky handling and marker placement can be checked without
+  loading the extension. Serve the repo root and open /test/harness.html.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comment My Site — harness</title>
+<style>
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #222; background: #fafafa; }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #222; color: #fff;
+           display: flex; align-items: center; padding: 0 24px; z-index: 10; }
+  .sticky { position: sticky; top: 56px; background: #ffe08a; padding: 10px 24px; z-index: 5; }
+  section { height: 700px; padding: 80px 24px 0; border-bottom: 1px solid #ddd; position: relative; }
+  section:nth-child(odd) { background: #eef4ff; }
+  .target { position: absolute; width: 24px; height: 24px; border: 3px solid #e5484d; border-radius: 50%; }
+  .chat { position: fixed; right: 20px; bottom: 90px; width: 56px; height: 56px; border-radius: 50%; background: #16a34a; }
+  #result { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; overflow: auto; z-index: 2147483646; padding: 24px; }
+  #result img { display: block; margin: 0 auto; max-width: 100%; box-shadow: 0 0 0 1px #fff; }
+  #result button { position: fixed; top: 12px; right: 12px; }
+</style>
+</head>
+<body>
+<header data-paint="#222222" data-label="FIXED HEADER">Fixed header</header>
+<div style="height:56px"></div>
+<div class="sticky" data-paint="#ffe08a" data-label="STICKY BAR">Sticky bar</div>
+<main id="main"></main>
+<div class="chat" data-paint="#16a34a" data-label="chat"></div>
+<div id="result"><button onclick="this.parentNode.style.display='none'">close</button><img id="resultImg"></div>
+
+<script>
+  // ---- page content -------------------------------------------------------
+  const main = document.getElementById('main');
+  for (let i = 0; i < 6; i++) {
+    const s = document.createElement('section');
+    s.dataset.paint = i % 2 ? '#fafafa' : '#eef4ff';
+    s.dataset.label = `SECTION ${i + 1}`;
+    s.innerHTML = `<h2>Section ${i + 1}</h2><p>Lorem ipsum dolor sit amet.</p>`;
+    const t = document.createElement('div');
+    t.className = 'target';
+    t.dataset.paint = '#e5484d';
+    t.style.left = `${120 + i * 90}px`;
+    t.style.top = `${260 + (i % 3) * 120}px`;
+    s.append(t);
+    main.append(s);
+  }
+
+  // ---- chrome.* mock -------------------------------------------------------
+  const store = {};
+  const uploads = {};
+  window.__log = [];
+  function paintFrame() {
+    const dpr = devicePixelRatio;
+    const c = document.createElement('canvas');
+    c.width = innerWidth * dpr; c.height = innerHeight * dpr;
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, innerWidth, innerHeight);
+    for (const el of document.querySelectorAll('[data-paint]')) {
+      const cs = getComputedStyle(el);
+      if (cs.opacity === '0' || cs.visibility === 'hidden') continue;
+      const r = el.getBoundingClientRect();
+      g.fillStyle = el.dataset.paint;
+      if (el.classList.contains('target')) {
+        g.strokeStyle = el.dataset.paint; g.lineWidth = 3;
+        g.beginPath(); g.arc(r.left + r.width / 2, r.top + r.height / 2, r.width / 2 - 1.5, 0, 7); g.stroke();
+        continue;
+      }
+      g.fillRect(r.left, r.top, r.width, r.height);
+      if (el.dataset.label) {
+        g.fillStyle = el.dataset.paint === '#222222' ? '#fff' : '#333';
+        g.font = '600 14px system-ui'; g.fillText(el.dataset.label, r.left + 24, r.top + 30);
+      }
+    }
+    // doc-Y ruler on the left edge to check stitching continuity
+    g.fillStyle = '#c00'; g.font = '11px monospace';
+    for (let vy = 0; vy < innerHeight; vy++) {
+      const docY = Math.round(scrollY + vy);
+      if (docY % 100 === 0) { g.fillRect(0, vy, 10, 1); g.fillText(String(docY), 12, vy + 4); }
+    }
+    return c.toDataURL('image/png');
+  }
+  window.chrome = {
+    storage: { local: {
+      async get(keys) { const out = {}; for (const k of [].concat(keys)) if (k in store) out[k] = structuredClone(store[k]); return out; },
+      async set(obj) { Object.assign(store, structuredClone(obj)); },
+      async remove(k) { delete store[k]; },
+    } },
+    runtime: {
+      async sendMessage(msg) {
+        window.__log.push(msg.type);
+        switch (msg.type) {
+          case 'capture': await new Promise(r => setTimeout(r, 30)); return { dataUrl: paintFrame() };
+          case 'capture-done': return { ok: true };
+          case 'save-begin': uploads[msg.id] = { name: msg.filename, parts: [] }; return { ok: true, mode: 'native' };
+          case 'save-chunk': uploads[msg.id].parts.push(msg.data); return { ok: true };
+          case 'save-end': {
+            const u = uploads[msg.id];
+            const bin = atob(u.parts.join(''));
+            const bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+            const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+            document.getElementById('resultImg').src = url;
+            window.__lastExport = { name: u.name, size: bytes.length, url };
+            return { ok: true, mode: 'native', path: `/Users/test/Desktop/${u.name}` };
+          }
+          case 'reveal': return { ok: true };
+        }
+      },
+    },
+  };
+  window.__store = store;
+
+  // ?seed — preload a cluster of overlapping comments to check card layout on export.
+  if (location.search.includes('seed')) {
+    const texts = [
+      'Отступ слева больше, чем у остальных блоков',
+      'Цвет кнопки не совпадает с макетом',
+      'Здесь должен быть второй абзац текста — он пропал после последнего релиза, проверьте CMS',
+      'Иконка размыта на ретине',
+      'Ок',
+    ];
+    store[`cms:page:${location.origin}${location.pathname}${location.search}`] = {
+      markers: texts.map((text, i) => ({ id: `s${i}`, x: 300 + (i % 2) * 40, y: 400 + i * 25, text, created: i })),
+    };
+  }
+</script>
+<script src="../extension/content.js"></script>
+</body>
+</html>

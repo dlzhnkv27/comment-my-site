@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Comment My Site",
+  "version": "1.0.0",
+  "description": "Комментарии к любой странице как в Figma: маркеры на странице и экспорт полного скриншота с ними.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6ofdpPlQd/+EpaqfpUX5DU6vEtJwkO+/J32AGxvAZbasn49CWm3rMLcFtDt3u1PiuWQjHpBMlTO5J0i9ea91YG83ps1Y+z0uCPFl7ob9+wQH9oFM8labscSsWfjeBsojpzn/FGQl3E8Mh7YZi3QjDVdozp0bpBBEs9bJWtZMf3OOxoRtTlq06JAOnzbhsEFXah7pVk1xSy7WOQdXEjSKH+zovuehNca8ynS8QTz1XG+zp3nWJqQlb18oNqc/Z37ptgqN9gaZkBcmII/aX9q8Zs35t05NKX9CSZzsAs2X6/G/vqA1XTqRaHUfxU/mVHWs2Cvl4kQbBbuG010iAuxwLQIDAQAB",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "Оставить комментарий (⌥⇧C)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "downloads",
+    "offscreen",
+    "nativeMessaging"
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      }
+    }
+  }
+}

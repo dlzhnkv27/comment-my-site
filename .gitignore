@@ -1,0 +1,6 @@
+.DS_Store
+*.pem
+__pycache__/
+design-decisions.md
+custdev-notes.md
+.claude/
