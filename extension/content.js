@@ -191,9 +191,9 @@ textarea::placeholder { color: #a8a8a8; }
 .tb.primary:hover { background: var(--accent-hover); }
 .tb kbd { font: 600 10.5px/1 ${FONT}; padding: 3px 5px; border-radius: 5px; background: rgba(255,255,255,.24); }
 .tb.icon { width: 34px; padding: 0; justify-content: center; }
-.tb.icon .lbl { display: none; }
-.tb.icon.armed { width: auto; padding: 0 10px; background: var(--danger-bg); color: var(--danger); }
-.tb.icon.armed .lbl { display: inline; }
+.tb:disabled { opacity: .4; cursor: default; pointer-events: none; }
+.tb.danger:hover, .tb.danger.armed { background: var(--danger-bg); color: var(--danger); }
+.tb.armed .lbl-wide { display: inline; }
 .count { font: 500 12px/1 ${FONT}; color: var(--muted); padding: 0 6px 0 8px; white-space: nowrap; }
 .sep { width: 1px; height: 20px; background: #ebebeb; margin: 0 4px; flex: none; }
 .root.busy .tb[data-act="export"] { pointer-events: none; opacity: .55; }
@@ -267,10 +267,11 @@ textarea::placeholder { color: #a8a8a8; }
     { class: 'tb', type: 'button', 'data-act': 'export', title: 'Скриншот всей страницы со всеми комментариями' },
     icon('download'), h('span', { class: 'lbl-wide', text: 'Экспорт PNG' }),
   );
+  const clearLabel = h('span', { class: 'lbl-wide', text: 'Очистить' });
   const clearBtn = h(
     'button',
-    { class: 'tb icon', type: 'button', 'data-act': 'clear', title: 'Удалить все комментарии на странице' },
-    icon('trash'), h('span', { class: 'lbl', text: 'Удалить все?' }),
+    { class: 'tb danger', type: 'button', 'data-act': 'clear', title: 'Удалить все комментарии на этой странице' },
+    icon('trash'), clearLabel,
   );
   const closeBtn = h(
     'button',
@@ -433,7 +434,8 @@ textarea::placeholder { color: #a8a8a8; }
     const n = markers.filter((m) => m.text).length;
     countEl.textContent = n ? `${n} ${plural(n, 'комментарий', 'комментария', 'комментариев')}` : '';
     countEl.hidden = !n;
-    clearBtn.hidden = !n;
+    clearBtn.disabled = !n;
+    if (!n) disarmClear();
   }
 
   // ---------------------------------------------------------------------------
@@ -636,19 +638,23 @@ textarea::placeholder { color: #a8a8a8; }
   exportBtn.addEventListener('click', () => exportImage());
   closeBtn.addEventListener('click', () => hide());
   clearBtn.addEventListener('click', () => {
+    // Two-step: the first click asks for confirmation, the second one clears.
     if (!clearTimer) {
       clearBtn.classList.add('armed');
+      clearLabel.textContent = 'Удалить все?';
       clearTimer = setTimeout(disarmClear, 3000);
       return;
     }
     disarmClear();
     closeComposer();
     const backup = markers;
+    const n = backup.length;
     markers = [];
     render();
     persist();
-    toast('Все комментарии удалены', {
-      action: { label: 'Вернуть', run: () => { markers = backup; render(); persist(); } },
+    toast(`Удалено: ${n} ${plural(n, 'комментарий', 'комментария', 'комментариев')}`, {
+      // Comments added after clearing are kept on undo.
+      action: { label: 'Вернуть', run: () => { markers = [...backup, ...markers]; render(); persist(); } },
       duration: 6000,
     });
   });
@@ -657,6 +663,7 @@ textarea::placeholder { color: #a8a8a8; }
     clearTimeout(clearTimer);
     clearTimer = null;
     clearBtn.classList.remove('armed');
+    clearLabel.textContent = 'Очистить';
   }
 
   function applyToolbarPos() {
